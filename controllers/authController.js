@@ -2,6 +2,7 @@ const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Profile = require("../models/Profile")
+const generateTokens = require("../utils/generateTokens")
 
 // Register
 exports.register = async (req, res) => {
@@ -26,6 +27,7 @@ exports.register = async (req, res) => {
 
 // Login
 exports.login = async (req, res) => {
+try{
   const { email, password } = req.body;
 
   const user = await User.findOne({ email });
@@ -38,18 +40,29 @@ exports.login = async (req, res) => {
     return res.status(400).json({ message: "Invalid credentials, wrong password" });
   }
 
-  const token = jwt.sign({ id: user._id }, "access_secret_key", {  
-    expiresIn: "1d"
+   // ✅ Generate access + refresh tokens
+  const { accessToken, refreshToken } = generateTokens(user._id);
+
+  // ✅ Send refresh token in secure HTTP-only cookie
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: true,   // set true in production with HTTPS
+    sameSite: "strict"
   });
 
+  // ✅ Send access token + user info in response
   res.json({        //response send to the client
-    token,
+    accessToken,
     user: {
       id: user._id,
       name: user.name,
       email: user.email
     }
   });
+ }catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 /**
@@ -80,4 +93,10 @@ exports.createProfile = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Server error" });
   }
+};
+
+//Logout
+exports.logout = (req, res) => {
+  res.clearCookie("refreshToken");
+  res.json({ message: "Logged out successfully" });
 };
